@@ -22,7 +22,6 @@ jobs:
         uses: appleboy/discord-action@master
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          color: ${{ contains(inputs.test_status, 'Pass') && '3066993' || '15158332' }}
           username: "GitHub Actions Bot"
           message: |
             ### 🚀 PR 알림: ${{ github.event.pull_request.title }}
