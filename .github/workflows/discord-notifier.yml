@@ -1,0 +1,53 @@
+name: Shared Discord Notifier
+on:
+  workflow_call:
+    inputs:
+      test_report_path:
+        type: string
+        default: 'test-results.xml'
+      sonar_status:
+        type: string
+        default: 'N/A'
+    secrets:
+      DISCORD_WEBHOOK_URL:
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: prepare
+        shell: bash
+        run: |
+          # slice 함수 대신 bash의 cut 명령어를 사용하여 안전하게 100자 요약
+          PR_BODY=$(cat << 'EOF'
+          ${{ github.event.pull_request.body }}
+          EOF
+          )
+          # 줄바꿈 제거 후 100자 추출
+          SUMMARY=$(echo "$PR_BODY" | tr -d '\n' | cut -c 1-100)
+          echo "summary=${SUMMARY}..." >> $GITHUB_OUTPUT
+          
+          # 테스트 결과 파싱 (중앙 집중)
+          if [ -f "${{ inputs.test_report_path }}" ]; then
+            TESTS=$(grep -oP 'tests="\K[^"]+' ${{ inputs.test_report_path }} | head -1 || echo "0")
+            FAILS=$(grep -oP 'failures="\K[^"]+' ${{ inputs.test_report_path }} | head -1 || echo "0")
+            echo "test_res=✅ $((TESTS-FAILS)) / Total: $TESTS (❌ Fail: $FAILS)" >> $GITHUB_OUTPUT
+          else
+            echo "test_res=⚠️ No Report" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Discord
+        uses: appleboy/discord-action@master
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          message: |
+            ### 🚀 PR 알림: ${{ github.event.pull_request.title }}
+            **요약:** ${{ steps.prepare.outputs.summary }}
+            
+            ---
+            - **테스트:** `${{ steps.prepare.outputs.test_res }}`
+            - **SonarQube:** ${{ inputs.sonar_status }}
+            [🔗 PR 바로가기](${{ github.event.pull_request.html_url }})
